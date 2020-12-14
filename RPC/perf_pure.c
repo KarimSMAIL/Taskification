@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define NUM_ITERATIONS 2
 
 /* /!\ we need rdynamic or dlsym does not work */
 int test_func(int a, int b)
@@ -17,7 +18,6 @@ int MAX(int X, int Y)
     if (X>Y) return X;
     else return Y;
 }
-
 
 
 int main(int argc, char ** argv )
@@ -43,47 +43,41 @@ int main(int argc, char ** argv )
         long total_rpcs = 0;
 
 
-        for(iter = 0 ; iter < 100000 ; iter++)
+    
+        double start = MPI_Wtime();
+
+        for( i = 0 ; i < size ; i++ )
         {
-            double start = MPI_Wtime();
+            MPI_Datatype param[2] = {MPI_INT, MPI_INT};
+            void* buffers[2] = {&i, &i};
 
-            for( i = 0 ; i < size ; i++ )
-            {
-                MPI_Datatype param[2] = {MPI_INT, MPI_INT};
-                void* buffers[2] = {&i, &i};
-
-                MPIX_Ioffload(buffers,
-                            param,
-                            2,
-                            &response_buffer[i],
-                            MPI_INT,
-                            "MAX",
-                            i,
-                            &work_requests[i]);
-            }
-
-            MPI_Waitall(size, work_requests, MPI_STATUSES_IGNORE);
-
-            double end = MPI_Wtime();
-
-            total_time += end - start;
-
-            total_rpcs += size;
+            MPIX_Ioffload(buffers,
+                        param,
+                        2,
+                        &response_buffer[i],
+                        MPI_INT,
+                        "MAX",
+                        i,
+                        &work_requests[i]);
         }
+
+        MPI_Waitall(size, work_requests, MPI_STATUSES_IGNORE);
+
+        double end = MPI_Wtime();
+
+        total_time += end - start;
+
+        total_rpcs += size;
 
         free(response_buffer);
         free(work_requests);
-
-
 
         printf("RPC per second %g an rpc takes %g usec\n", 
                 (double)total_rpcs/(double)total_time,
                 1e6*(double)total_time/(double)total_rpcs);
 
     }
-
-
-
+    
     MPIX_Accelerator_finalize();
 
 

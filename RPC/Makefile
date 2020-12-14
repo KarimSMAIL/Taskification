@@ -2,7 +2,7 @@ CC=mpicc
 CFLAGS=-O3 -g
 LDFLAGS=-lpthread -lffi -ldl
 
-all: libmpiacc.so test perf fibo perf_pure Ourtest simple
+all: libmpiacc.so test perf fibo perf_pure Ourtest simple test_mpix
 
 libmpiacc.so: mpi_accelerator.c
 	$(CC) $(CFLAGS) -fpic -shared $^ -o $@ $(LDFLAGS)
@@ -27,6 +27,9 @@ perf_pure: perf_pure.c libmpiacc.so
 
 Ourtest: Ourtest.c libmpiacc.so
 	$(CC) $(CFLAGS) -rdynamic Ourtest.c -o $@ -Wl,-rpath,$(PWD) -L. -I. -lmpiacc
+
+test_mpix: test_mpix.c libmpiacc.so
+	$(CC) $(CFLAGS) -rdynamic test_mpix.c -o $@ -Wl,-rpath,$(PWD) -L. -I. -lmpiacc
 
 clean:
 	rm ./libmpiacc.so ./test ./perf ./fibo ./Ourtest ./perf_pure ./simple

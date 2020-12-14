@@ -1,0 +1,107 @@
+RPC:
+Le principe est de lancer n processus qui peuvent s'excutent en n coeur différents, et que le main (rank == 0) peut lancer les fonction chez les autres processus, et ça ce qu'on appel le principe de RPC. 
+
+
+ce qu'on là est une fonction qui permet d'appeler les fonctions à distances, il faut juste appeler MPIX_Offload qui prend en parametre :
+	les parametres (buffers) //une liste de pointeurs
+	leurs types (datatype)
+	le nombre de parametres (sendcount) 
+	la valeur de retour (recvbuf) //le pointeur vers la valeur de retour
+	le type de la valeur de retour (recvtype)
+	le nom de la fonction qu'on veut appeler à distance (fname)
+	processus mpi sur lequel on veut appeler (dest).
+
+L'idée de cette fonction est d'appeler les fonctions à distance, ce qu'on appel RPC, Remote Procedure Call, 
+
+soit une fonction func qu'on veut appeler à distance, 
+si je suis le rank 0 (if rank == 0) (ça veut dire on est dans le main), j'appel tous les autres processus sauf moi méme, 
+(for (int i = 1; i < size; ++i)) (size est le nombre de processus), et on fait appel à la fonction MPIX_Offload avec tous ses parametres, et ce qui est interessant est d'appeler la fonction func spécifié dans les parametres, à distance (dans le processus spécifié par son rank dans les parametres aussi).
+
+
+Titre : Le lien entre le plugin et la capacité d'appeler les fonctions à distance:
+
+Notre plugin detecte les fonction pures, qui sont des fonctions indépendantes aux autres fonctions, c-à-d leurs résultat ne dépend pas de résultat des autres fonctions (ne depend qu'elle méme car elle repond toujours la meme chose pour les meme parametres d'entré), et le plus important c'est qu'elles sont independantes de où elles ont été appelés (une fonction pure appelé localement ou à distance, c'est pareil, et c'est l'interet de cette fonction), et l'objectif est de faire appel à ces fonction à distance, via un exemple RPC qui est toute un systeme qui permet de faire ces appel en parallele (sachant que le principe d'un compilateur ordinaire est d’exécuter les fonctions d'un programme en séquentiel), cela nous apporte un gain dans le temps d’exécution de programme ce qui améliore ses performances.
+Pour cela, on a créé ce modele RPC, qui nous permet de lancer des fonctions à distance, et la fonction MPIX_Offload est l'util qui va nous permetre d'appeler ces fonctions à distanace, via d'autres processus MPI, qui s'executent dans autres coeur.
+
+Deux chose complémentaires à retenir :
+Le plugin est l'util qui nous permet d'idntifier les fonctions qui sont candidates à etre appelé à distance.
+La fonction MPIX_Offload est l'util qui va nous permetre d'appeler ces fonctions candidates à distanace.
+
+
+pourquoi on fait un plugin :
+parce-que idéalement on aimerait aller plus loin et de faire la parallésation automatique, les fonction pures seront detecté automatiquement et les lances en paralléle lors il seront executer plusieurs fois dans le mm programme (dans une boucles par exemple).
+
+exemple :  // on doit le mettre dans le rapport
+
+int pure_func(int a, int b)
+{
+    return a*b;
+}
+
+main : 
+ //traitement 
+
+ int tab[128];
+ int i;
+ for(i=0; i<128; i++)
+ {
+ 	tab[i] = pure_func(i, i);
+ }
+
+on peut tout à fait paralléliser cette appel, puisque les éléments de la boucles sont independants :
+ -la fonction pure_func est une fonction pure, elle ne dépend que de ses paramétres et,
+ -la valeur de retour dans tab[i] on peut les récupérer indépendament.
+
+cela est equivalent à (avec l'utilisation de openMP):
+
+#pragma omp parallel for
+for(i=0; i<128; i++)
+ {
+ 	tab[i] = pure_func(i, i);
+ }
+
+nous on veut faire un truc différent, on veut la paralléliser mais pas dans des threads dans un seul processus, mais dans 128 processus différents.
+Pour cela, on va utiliser la fonction MPIX_Offload, pour faire appel à pure_func dans 128 processus déffirents :
+
+for(i=0; i<128; i++)
+ {
+ 	void* buffers[2] = {&i, &i};
+ 	MPI_Datatype type[2] = {MPI_INT, MPI_INT};
+
+ 	MPIX_Offload(buffers,
+ 				 type,
+ 				 2,
+ 				 &tab[i],
+ 				 MPI_INT,
+ 				 "pure_func",
+ 				 i);
+ }
+
+comme ça ils seront appeler les un aprés les autres car MPIX_Offload est bloquant, mais si on fait :
+
+MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+MPI_Comm_size(MPI_COMM_WORLD, &size);
+MPI_REQUEST req[128];
+if (rank == 0)
+{
+	for(i=0; i<128; i++)
+	 {
+	 	void* buffers[2] = {&i, &i};
+	 	MPI_Datatype type[2] = {MPI_INT, MPI_INT};
+
+	 	MPIX_Ioffload(buffers,
+	 				 type,
+	 				 2,
+	 				 &tab[i],
+	 				 MPI_INT,
+	 				 "pure_func",
+	 				 (i)%size, /*pour faire appeler la function dans des processus deffirent autant qu'on a dans notre machine*/
+	 				 &req[i]);
+	 }
+
+	 MPI_Waitall(req, 128, MPI_STATUES_IGNORE);
+
+}
+
+Ce qui est important est que le probleme dans le parallélisme en utilisant l'openMP avec mémoire partagé est qu'on est coincé dans son noeud, car il utilise les threads qui n'ecrit pas dans un autre processus (machine), mais avec l'utilisation des appels dans des processus différent, on aura pas le probbleme de mémoire partagé car on utilise les mémoires de chaque noeud.
+
