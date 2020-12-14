@@ -1,0 +1,63 @@
+Maintenant, on va parler sur la parallélisation :
+
+slide 26 :
+En effet, les fonctions dites pures, sont des fonctions indépendantes des autres fonctions, c'est-à-dire que leur résultat ne dépend pas du résultat des autres fonctions, l'objectif est d'appeler ces fonctions à distance, via un exemple RPC qui est out un système qui permet de faire ces appels en parallèle (sachant que le principe d'un compilateur ordinaire est d'exécuter les fonctions d'un programme en séquentiel), cela nous apporte un gain dans le temps d'exécution du programme. ce qui nous permet d'atteindre l'objectif du projet.
+
+
+Dans la programmation distribuée, un appel de procédure à distance ou (RPC) est lorsqu'un programme informatique provoque l'exécution d'une procédure dans un espace d'adressage différent, qui est codé comme s'il s'agissait d'un appel de procédure local, sans que le programmeur code explicitement les détails de l'interaction à distance. on peut dire que RPC est un protocole de communication qui permet d'appeler des procédures sur une machine (ou noeud) distante à l'aide d'un serveur d'application.
+
+slide 27 :
+pou cela, on a créé tout un système qui permet de faire ces appels de fonction à distance, la fonction MPIX_Offload (appel bloquant), est l'outil qui nous permet d’appeler des fonctions à distance, via d’autres processus MPI, qui s’exécutent dans d’autres coeur. 
+On doit spécifié dans les parametres de la focntion MPIX_Offload, la liste des parameters de la fonction appeler à distance, leurs types, le nombre de parametres, la valeur de retour son type, le nom de la fonction en chaine de caractere, et le rang de processus MPI sur lequel on veut appeler la fonction.
+
+slide 28 :
+
+En effet, y'a Deux choses complémentaires qu'on doit retenir :
+
+est que Le plugin est l’outil qui nous permet d’identifier les fonctions qui sont candidates à être appelé à distance.
+
+slide 29 :
+
+et La fonction MPIX_Offload est l’outil qui va nous permettre d’appeler ces fonctions candidate à distance.
+
+slide 30 :
+donc, on peut considéré le role du plugin et de la parallélisation via ce modele RPC, comme deux tache successives dans le concept de la parallélisation automatique.
+
+slide 31 :
+un exemple de parallélisation automatique : on considere une fonction dite pure, qui sera appeler dans une boucle 128 fois, et la valeur de retour de cette fonction sera stocker à chaque fois dans une case d'un tableau, sachant que les valeurs de retours de cette fonction sont indépendants.
+
+slide 32 :
+donc on peut paralléliser les appels de cette fonction simplement, via l'interface de programmation paralléle OpenMP, tel que la fonction sera appeler dans des threads de meme noeud.
+
+slide 33 :
+comme on peut faire appel à la fonction MPIX_Offload, en spécifiant les parametres necessaire à cette appel, pour faire exécuter cette fonction dans 128 processus différents, 
+
+slide 34 :
+la différence entre les deux méthodes de parallélisation , est que dans l'utilisation de OpenMP, avec mémoire partagé, on est coincé dans son noeud, car il utilise les threads qui partagent la même mémoire, alors que l'utilisation des appels dans des processus différents, on utlise la memoire de chaque processus, qui va nous permettre d'adresser une mémoire plus grande et donc faire des traitements plus conséquents.
+
+
+slide 35 :
+Pour Les mesures de performances:
+Dans cette partie, une étude de scalabilité a été mise en place(en parlant de la scalabilité forte car la taille du problème est fixe ) , le principe est de mesurer le temps d’exécution en faisant variant le nombre processus a chaque fois (le nombre d’itération égal a 100000) , dans deux cas ,le cas ou le déplacement des données seul (c’est à dire uniquement envoyer et recevoir les donnée sans appel de RPC avec des messages MPI), et le cas où le déplacement +plus le traitement (c’est à dire avec appel RPC),les résultats obtenus sont présentés dans le graphe prensenté dans le slide:
+
+le graphe en vert représente le déplacement des données seul (des messages MPI simple).
+le graphe en violet, représente le déplacement plus le traitement fait via une appel RPC.
+
+D’après les résultats obtenus, on peut constater que :
+
+pour le graphe RPC : le test consiste a l’envoi successif d’un RPC à tous les processus et
+l’attente du résultat 100 000 fois :
+
+— on remarque un surcoût à 1 coeurs qui est du à la mauvaise gestion du thread-mutiple en local par MPI et cela peut étre justifié par le fait que les fonctions sont appelées localement et MPI gère mal la concurence de messages.
+
+— et aussi un surcoût au dessus de 4 coeurs qui est dû à la surcharge car il n’y a que 4 coeurs sur la machine utilisé pour mesuré ces perf et aussi car les threads sont en compétition pour les resources matérielles.
+
+— donc on peut évaluer le traitement du RPC a un surcout d'environ 7 USEC et qui peut être justifié par le fait d’appeler une fonction à distance.
+
+pour le graphe de déplacement des données seul :
+
+— On remarque que le déplacement des données n’est pas sensible à la surchage car il n'y a que 4 coeurs sur la machine.
+
+— De plus ces deux courbes représentent EXACTEMENT le même déplacement de données aller qui est l'envoi des paramètres, et retour c-a-d valeur de retour de la fonction.
+
+et pour la conclusion je passe la parole à mon camarade.
